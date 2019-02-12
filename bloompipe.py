@@ -209,40 +209,6 @@ have equal capacity and error rate")
     def __and__(self, other):
         return self.intersection(other)
 
-    def tofile(self, f):
-        """Write the bloom filter to file object `f'. Underlying bits
-        are written as machine values. This is much more space
-        efficient than pickling the object."""
-        f.write(pack(self.FILE_FMT, self.error_rate, self.num_slices,
-                     self.bits_per_slice, self.capacity, self.count))
-        (f.write(self.bitarray.tobytes()) if is_string_io(f)
-         else self.bitarray.tofile(f))
-
-    @classmethod
-    def fromfile(cls, f, n=-1):
-        """Read a bloom filter from file-object `f' serialized with
-        ``BloomFilter.tofile''. If `n' > 0 read only so many bytes."""
-        headerlen = calcsize(cls.FILE_FMT)
-
-        if 0 < n < headerlen:
-            raise ValueError('n too small!')
-
-        filter = cls(1)  # Bogus instantiation, we will `_setup'.
-        filter._setup(*unpack(cls.FILE_FMT, f.read(headerlen)))
-        filter.bitarray = bitarray.bitarray(endian='little')
-        if n > 0:
-            (filter.bitarray.frombytes(f.read(n-headerlen)) if is_string_io(f)
-             else filter.bitarray.fromfile(f, n - headerlen))
-        else:
-            (filter.bitarray.frombytes(f.read()) if is_string_io(f)
-             else filter.bitarray.fromfile(f))
-        if filter.num_bits != filter.bitarray.length() and \
-               (filter.num_bits + (8 - filter.num_bits % 8)
-                != filter.bitarray.length()):
-            raise ValueError('Bit length mismatch!')
-
-        return filter
-
     def __getstate__(self):
         d = self.__dict__.copy()
         del d['make_hashes']
@@ -251,6 +217,7 @@ have equal capacity and error rate")
     def __setstate__(self, d):
         self.__dict__.update(d)
         self.make_hashes = make_hashfuncs(self.num_slices, self.bits_per_slice)
+
 
 class ScalableBloomFilter(object):
     SMALL_SET_GROWTH = 2 # slower, but takes up less memory
@@ -352,47 +319,6 @@ class ScalableBloomFilter(object):
     @property
     def count(self):
         return len(self)
-
-    def tofile(self, f):
-        """Serialize this ScalableBloomFilter into the file-object
-        `f'."""
-        f.write(pack(self.FILE_FMT, self.scale, self.ratio,
-                     self.initial_capacity, self.error_rate))
-
-        # Write #-of-filters
-        f.write(pack(b'<l', len(self.filters)))
-
-        if len(self.filters) > 0:
-            # Then each filter directly, with a header describing
-            # their lengths.
-            headerpos = f.tell()
-            headerfmt = b'<' + b'Q'*(len(self.filters))
-            f.write(b'.' * calcsize(headerfmt))
-            filter_sizes = []
-            for filter in self.filters:
-                begin = f.tell()
-                filter.tofile(f)
-                filter_sizes.append(f.tell() - begin)
-
-            f.seek(headerpos)
-            f.write(pack(headerfmt, *filter_sizes))
-
-    @classmethod
-    def fromfile(cls, f):
-        """Deserialize the ScalableBloomFilter in file object `f'."""
-        filter = cls()
-        filter._setup(*unpack(cls.FILE_FMT, f.read(calcsize(cls.FILE_FMT))))
-        nfilters, = unpack(b'<l', f.read(calcsize(b'<l')))
-        if nfilters > 0:
-            header_fmt = b'<' + b'Q'*nfilters
-            bytes = f.read(calcsize(header_fmt))
-            filter_lengths = unpack(header_fmt, bytes)
-            for fl in filter_lengths:
-                filter.filters.append(BloomFilter.fromfile(f, fl))
-        else:
-            filter.filters = []
-
-        return filter
 
     def __len__(self):
         """Returns the total number of elements stored in this SBF"""
