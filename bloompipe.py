@@ -327,10 +327,10 @@ class ScalableBloomFilter(object):
 def main():
     sbf = ScalableBloomFilter(mode=ScalableBloomFilter.SMALL_SET_GROWTH)
 
-    for line in sys.stdin.read().splitlines():
+    for line in sys.stdin.buffer.read().split(b'\n'):
         if line not in sbf:
             sbf.add(line)
-            print(line)
+            sys.stdout.buffer.write(line)
 
 if __name__ == "__main__":
     main()
