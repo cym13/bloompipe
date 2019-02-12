@@ -330,7 +330,7 @@ def main():
     for line in sys.stdin.buffer.read().split(b'\n'):
         if line not in sbf:
             sbf.add(line)
-            sys.stdout.buffer.write(line)
+            sys.stdout.buffer.write(line + b'\n')
 
 if __name__ == "__main__":
     main()
